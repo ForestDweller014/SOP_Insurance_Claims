@@ -1,16 +1,16 @@
 # Graph Report - SOP_Insurance_Claims  (2026-09-17)
 
 ## Corpus Check
-- 35 files · ~53,594 words
+- 35 files · ~54,033 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 358 nodes · 333 edges · 76 communities (18 shown, 58 thin omitted)
+- 361 nodes · 338 edges · 77 communities (19 shown, 58 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 3 edges (avg confidence: 0.6)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b67df389`
+- Built from commit: `85eeef94`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -91,12 +91,13 @@
 - Structural AST Extraction
 - Graphify Repository Policy
 - Scoped Graph Navigation
+- page.tsx
 
 ## God Nodes (most connected - your core abstractions)
 1. `Continuous Integration Engineering` - 23 edges
 2. `compilerOptions` - 18 edges
-3. `Investigation and Debugging` - 13 edges
-4. `processMessage()` - 12 edges
+3. `processMessage()` - 13 edges
+4. `Investigation and Debugging` - 13 edges
 5. `Large-Feature Decomposition` - 12 edges
 6. `Minimal-Context Coding` - 12 edges
 7. `What You Must Do When Invoked` - 12 edges
@@ -122,11 +123,11 @@
 ## Hyperedges (group relationships)
 - **Graphify Semantic Extraction Flow** — _codex_skills_graphify_skill_semantic_extraction, _codex_skills_graphify_skill_semantic_cache, _codex_skills_graphify_references_extraction_spec_semantic_extraction_specification, _codex_skills_graphify_references_extraction_spec_confidence_rubric, _codex_skills_graphify_references_extraction_spec_deterministic_node_ids, _codex_skills_graphify_skill_graph_build_and_analysis [EXTRACTED 1.00]
 
-## Communities (76 total, 58 thin omitted)
+## Communities (77 total, 58 thin omitted)
 
 ### Community 7 - "claims-workflow.ts"
-Cohesion: 0.07
-Nodes (51): ChatMessage, claims, FIELD_LABELS, Home(), openingMessage, PHASE_COPY, policyholders, workflowData (+43 more)
+Cohesion: 0.11
+Nodes (34): applyIntentResolution(), captureMessageMemory(), ConversationMemory, detectCallerContext(), detectEmotion(), detectPostProcessPreference(), detectRefusedField(), EmotionalState (+26 more)
 
 ### Community 8 - "devDependencies"
 Cohesion: 0.06
@@ -196,8 +197,12 @@ Nodes (3): For git commit hook, For native CLAUDE.md integration, graphify refer
 Cohesion: 0.50
 Nodes (3): For --cluster-only, For --update (incremental re-extraction), graphify reference: incremental update and cluster-only
 
+### Community 76 - "page.tsx"
+Cohesion: 0.12
+Nodes (20): ChatMessage, claims, FIELD_LABELS, Home(), openingMessage, PHASE_COPY, policyholders, workflowData (+12 more)
+
 ## Knowledge Gaps
-- **225 isolated node(s):** `geistSans`, `geistMono`, `metadata`, `claims`, `policyholders` (+220 more)
+- **226 isolated node(s):** `geistSans`, `geistMono`, `metadata`, `claims`, `policyholders` (+221 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **58 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -205,13 +210,13 @@ Nodes (3): For --cluster-only, For --update (incremental re-extraction), graphif
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `devDependencies` connect `devDependencies` to `package.json`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
+  _High betweenness centrality (0.019) - this node is a cross-community bridge._
 - **Why does `compilerOptions` connect `compilerOptions` to `include`?**
   _High betweenness centrality (0.008) - this node is a cross-community bridge._
 - **What connects `geistSans`, `geistMono`, `metadata` to the rest of the system?**
-  _251 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _252 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `claims-workflow.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.07127882599580712 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.1092436974789916 - nodes in this community are weakly interconnected._
 - **Should `devDependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.05714285714285714 - nodes in this community are weakly interconnected._
 - **Should `Continuous Integration Engineering` be split into smaller, more focused modules?**

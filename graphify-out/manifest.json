@@ -119,13 +119,8 @@
     "ast_hash": "3b842878b17bee9735d706d4c1eb0abc",
     "semantic_hash": ""
   },
-  "apps/insurance_claims/demo/.vinext/dev/lock.json": {
-    "mtime": 1789671235.6415005,
-    "ast_hash": "58a01d06cf82ce215bdf3060c5532736",
-    "semantic_hash": ""
-  },
   "apps/insurance_claims/demo/.wrangler/deploy/config.json": {
-    "mtime": 1789671252.6976032,
+    "mtime": 1789672579.2506344,
     "ast_hash": "9d663abcd158c67f171c437cb71f9503",
     "semantic_hash": ""
   },
@@ -135,8 +130,8 @@
     "semantic_hash": ""
   },
   "apps/insurance_claims/demo/app/page.tsx": {
-    "mtime": 1789670985.182969,
-    "ast_hash": "6f8ac082fd79d929a2011cd046de6bea",
+    "mtime": 1789672485.1066432,
+    "ast_hash": "736c09a6d455d9eb938ec198581729ed",
     "semantic_hash": ""
   },
   "apps/insurance_claims/demo/eslint.config.mjs": {
@@ -145,13 +140,13 @@
     "semantic_hash": ""
   },
   "apps/insurance_claims/demo/lib/claims-workflow.test.ts": {
-    "mtime": 1789670899.1665256,
-    "ast_hash": "e59667629b449fa941f110a8f8a94481",
+    "mtime": 1789672548.740925,
+    "ast_hash": "cb3b6982b88b9a4947b475e567f6250f",
     "semantic_hash": ""
   },
   "apps/insurance_claims/demo/lib/claims-workflow.ts": {
-    "mtime": 1789670845.8613982,
-    "ast_hash": "4c6648bb4a944eeafb65dbca02eacf3d",
+    "mtime": 1789672564.8067982,
+    "ast_hash": "ca688dc32c2cc48eeaaed5c015a64766",
     "semantic_hash": ""
   },
   "apps/insurance_claims/demo/next-env.d.ts": {

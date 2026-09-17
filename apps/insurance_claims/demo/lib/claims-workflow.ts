@@ -43,7 +43,13 @@ export type IntentHints = {
   status?: string;
   month?: number;
   year?: number;
-  topic?: 'denial' | 'status' | 'documents' | 'general';
+  topic?: 'denial' | 'status' | 'documents' | 'next_steps' | 'general';
+};
+
+export type IntentResolution = {
+  status: 'resolved' | 'ambiguous' | 'not_found';
+  candidateCaseIds: string[];
+  clarification?: string;
 };
 
 export type EmotionalState =
@@ -77,6 +83,8 @@ export type ConversationMemory = {
   };
   intent: {
     topic?: IntentHints['topic'];
+    resolution?: IntentResolution['status'];
+    candidateCaseIds: string[];
   };
   claim: {
     type?: string;
@@ -164,7 +172,7 @@ export function createInitialState(): WorkflowState {
       },
       caller: {},
       policy: {},
-      intent: {},
+      intent: { candidateCaseIds: [] },
       claim: { caseIdentifiers: [] },
       emotion: { current: 'neutral', history: [] },
       escalation: { requested: false, requestCount: 0, offered: false },
@@ -262,6 +270,10 @@ function extractIntentHints(text: string, previous: IntentHints): IntentHints {
     next.topic = 'status';
   } else if (/\bdocument|upload|submit|paperwork\b/.test(normalized)) {
     next.topic = 'documents';
+  } else if (/\bnext steps?\b|\bwhat (?:do|should) i do\b|\bwhat happens next\b/.test(normalized)) {
+    next.topic = 'next_steps';
+  } else if (/\bclaim question\b|\bhelp (?:me )?with (?:my )?claim\b/.test(normalized)) {
+    next.topic = 'general';
   }
   return next;
 }
@@ -458,7 +470,11 @@ function captureMessageMemory(
         policyNumber:
           extractedIdentity.policyNumber ?? current.memory.policy.policyNumber,
       },
-      intent: { topic: hints.topic ?? current.memory.intent.topic },
+      intent: {
+        topic: hints.topic ?? current.memory.intent.topic,
+        resolution: current.memory.intent.resolution,
+        candidateCaseIds: [...current.memory.intent.candidateCaseIds],
+      },
       claim: {
         type: hints.caseType ?? current.memory.claim.type,
         approximateDate:
@@ -490,8 +506,29 @@ function captureMessageMemory(
   };
 }
 
-function resolveClaim(state: WorkflowState, data: WorkflowData): Claim | undefined {
-  if (!state.candidatePartyId) return undefined;
+function intentClarification(candidates: Claim[]): string {
+  const types = [...new Set(candidates.map((claim) => claim.case_type))];
+  if (types.length > 1) {
+    return `Which claim type do you mean: ${types.sort().join(', ')}?`;
+  }
+  const dates = [...new Set(candidates.map((claim) => claim.created_at.slice(0, 7)))];
+  if (dates.length > 1) {
+    return 'What approximate month and year was the claim filed?';
+  }
+  const statuses = [...new Set(candidates.map((claim) => claim.status))];
+  if (statuses.length > 1) {
+    return `Is the claim ${statuses.sort().join(', or ')}?`;
+  }
+  return 'Please share the claim ID so I can select the correct case.';
+}
+
+export function resolveIntent(
+  state: WorkflowState,
+  data: WorkflowData,
+): IntentResolution {
+  if (!state.candidatePartyId) {
+    return { status: 'not_found', candidateCaseIds: [] };
+  }
   let candidates = data.claims.filter(
     (claim) => claim.party_id === state.candidatePartyId,
   );
@@ -513,7 +550,42 @@ function resolveClaim(state: WorkflowState, data: WorkflowData): Claim | undefin
       (claim) => Number(claim.created_at.slice(0, 4)) === hints.approximateDate?.year,
     );
   }
-  return candidates.length === 1 ? candidates[0] : undefined;
+  if (candidates.length === 1) {
+    return {
+      status: 'resolved',
+      candidateCaseIds: [candidates[0].case_id],
+    };
+  }
+  if (candidates.length > 1) {
+    return {
+      status: 'ambiguous',
+      candidateCaseIds: candidates.map((claim) => claim.case_id),
+      clarification: intentClarification(candidates),
+    };
+  }
+  return {
+    status: 'not_found',
+    candidateCaseIds: [],
+    clarification:
+      'I could not match those details to one of your claims. Please check the claim type, filing date, status, or claim ID.',
+  };
+}
+
+function applyIntentResolution(
+  state: WorkflowState,
+  resolution: IntentResolution,
+): WorkflowState {
+  return {
+    ...state,
+    memory: {
+      ...state.memory,
+      intent: {
+        ...state.memory.intent,
+        resolution: resolution.status,
+        candidateCaseIds: [...resolution.candidateCaseIds],
+      },
+    },
+  };
 }
 
 function safeVerificationReply(
@@ -636,8 +708,18 @@ export function processMessage(
     }
 
     state = transition(state, 'RESOLVE_INTENT', true);
-    const claim = resolveClaim(state, data);
-    if (claim) {
+    const resolution = resolveIntent(state, data);
+    state = applyIntentResolution(state, resolution);
+    if (resolution.status === 'resolved') {
+      const claim = data.claims.find(
+        (item) => item.case_id === resolution.candidateCaseIds[0],
+      );
+      if (!claim) {
+        return {
+          state,
+          reply: 'I could not access the matched claim record. I can connect you with a human representative.',
+        };
+      }
       state = { ...state, selectedCaseId: claim.case_id };
       state = transition(state, 'PROCESS_CASE', Boolean(state.selectedCaseId));
       return {
@@ -647,16 +729,26 @@ export function processMessage(
     }
     return {
       state,
-      reply: 'Thank you—your identity is verified. What type of claim are you calling about, and roughly when was it filed?',
+      reply: `Thank you—your identity is verified. ${resolution.clarification ?? 'What type of claim are you calling about, and roughly when was it filed?'}`,
     };
   }
 
   if (state.phase === 'RESOLVE_INTENT') {
-    const claim = resolveClaim(state, data);
+    const resolution = resolveIntent(state, data);
+    state = applyIntentResolution(state, resolution);
+    if (resolution.status !== 'resolved') {
+      return {
+        state,
+        reply: resolution.clarification ?? 'Please share the claim type, filing date, status, or claim ID.',
+      };
+    }
+    const claim = data.claims.find(
+      (item) => item.case_id === resolution.candidateCaseIds[0],
+    );
     if (!claim) {
       return {
         state,
-        reply: 'I found more than one possible claim. Please share the claim type, approximate filing month, or whether it is open, closed, or denied.',
+        reply: 'I could not access the matched claim record. I can connect you with a human representative.',
       };
     }
     state = { ...state, selectedCaseId: claim.case_id };

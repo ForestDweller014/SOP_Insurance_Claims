@@ -40,6 +40,43 @@ test('Margaret sample verifies with three PII fields and reuses the stored claim
   assert.match(result.reply, /don’t need to start over/i);
 });
 
+test('ambiguous intent stays unresolved until a targeted clarification selects one claim', () => {
+  let result = turn(
+    createInitialState(),
+    'I am Margaret Chen, DOB 1985-03-15, SSN last four 4472.',
+  );
+
+  assert.equal(result.state.phase, 'RESOLVE_INTENT');
+  assert.equal(result.state.memory.intent.resolution, 'ambiguous');
+  assert.equal(result.state.selectedCaseId, undefined);
+  assert.match(result.reply, /claim type/i);
+
+  result = turn(result.state, 'It was a healthcare claim from January 2025.');
+  assert.equal(result.state.phase, 'PROCESS_CASE');
+  assert.equal(result.state.selectedCaseId, 'CL-2011');
+  assert.equal(result.state.memory.intent.resolution, 'resolved');
+});
+
+test('case resolution never selects an authenticated caller’s non-matching case ID', () => {
+  const result = turn(
+    createInitialState(),
+    'I am Margaret Chen, DOB 1985-03-15, SSN last four 4472. I need claim CL-3001.',
+  );
+
+  assert.equal(result.state.phase, 'RESOLVE_INTENT');
+  assert.equal(result.state.memory.intent.resolution, 'not_found');
+  assert.equal(result.state.selectedCaseId, undefined);
+  assert.match(result.reply, /could not match/i);
+  assert.doesNotMatch(result.reply, /diagnosis report/i);
+});
+
+test('intent capture recognizes next-step and general claim questions', () => {
+  let result = turn(createInitialState(), 'I need help with my claim.');
+  assert.equal(result.state.memory.intent.topic, 'general');
+  result = turn(result.state, 'What should I do next?');
+  assert.equal(result.state.memory.intent.topic, 'next_steps');
+});
+
 test('policy number is a lookup hint and never counts as approved PII', () => {
   const result = turn(
     createInitialState(),

@@ -35,7 +35,7 @@ test('Margaret sample verifies with three PII fields and reuses the stored claim
     'RESOLVE_INTENT',
     'PROCESS_CASE',
   ]);
-  assert.deepEqual(new Set(result.state.matchedFields), new Set(['name', 'dob', 'id_last4']));
+  assert.deepEqual(new Set(result.state.memory.identity.matchedFields), new Set(['name', 'dob', 'id_last4']));
   assert.equal(result.state.selectedCaseId, 'CL-2048');
   assert.match(result.reply, /don’t need to start over/i);
 });
@@ -47,18 +47,18 @@ test('policy number is a lookup hint and never counts as approved PII', () => {
   );
 
   assert.equal(result.state.phase, 'VERIFY_ID');
-  assert.equal(result.state.matchedFields.length, 2);
-  assert.deepEqual(new Set(result.state.matchedFields), new Set(['name', 'dob']));
+  assert.equal(result.state.memory.identity.matchedFields.length, 2);
+  assert.deepEqual(new Set(result.state.memory.identity.matchedFields), new Set(['name', 'dob']));
 });
 
 test('partial identity answers accumulate across turns', () => {
   let state = turn(createInitialState(), 'My name is Margaret Chen.').state;
-  assert.deepEqual(state.matchedFields, ['name']);
+  assert.deepEqual(state.memory.identity.matchedFields, ['name']);
   state = turn(state, 'My birthday is 03/15/1985.').state;
-  assert.deepEqual(new Set(state.matchedFields), new Set(['name', 'dob']));
+  assert.deepEqual(new Set(state.memory.identity.matchedFields), new Set(['name', 'dob']));
   state = turn(state, 'My email is MARGARET@EMAIL.COM.').state;
   assert.equal(state.phase, 'RESOLVE_INTENT');
-  assert.equal(state.matchedFields.length, 3);
+  assert.equal(state.memory.identity.matchedFields.length, 3);
 });
 
 test('configured name and email aliases plus formatted phone values are normalized', () => {
@@ -68,10 +68,10 @@ test('configured name and email aliases plus formatted phone values are normaliz
   );
 
   assert.equal(result.state.phase, 'RESOLVE_INTENT');
-  assert.ok(result.state.matchedFields.includes('name'));
-  assert.ok(result.state.matchedFields.includes('dob'));
-  assert.ok(result.state.matchedFields.includes('email'));
-  assert.ok(result.state.matchedFields.includes('phone'));
+  assert.ok(result.state.memory.identity.matchedFields.includes('name'));
+  assert.ok(result.state.memory.identity.matchedFields.includes('dob'));
+  assert.ok(result.state.memory.identity.matchedFields.includes('email'));
+  assert.ok(result.state.memory.identity.matchedFields.includes('phone'));
 });
 
 test('claim details remain inaccessible before three matches while intent is remembered', () => {
@@ -81,12 +81,74 @@ test('claim details remain inaccessible before three matches while intent is rem
   );
 
   assert.equal(result.state.phase, 'VERIFY_ID');
-  assert.equal(result.state.intentHints.status, 'denied');
-  assert.equal(result.state.intentHints.caseType, 'healthcare');
-  assert.equal(result.state.intentHints.month, 1);
+  assert.equal(result.state.memory.claim.statusHint, 'denied');
+  assert.equal(result.state.memory.claim.type, 'healthcare');
+  assert.equal(result.state.memory.claim.approximateDate?.month, 1);
   assert.equal(getSelectedClaim(result.state, claims), undefined);
   assert.doesNotMatch(result.reply, /CL-\d+/);
   assert.doesNotMatch(result.reply, /pathology|office note/i);
+});
+
+test('every turn captures separate memory categories without selecting a claim', () => {
+  const result = turn(
+    createInitialState(),
+    'I’m David Chen, Margaret’s frustrated son and representative. I’m calling about policy POL-9921 and denied healthcare claim CL-2048 from January 2026. Email me a summary later.',
+  );
+
+  assert.equal(result.state.phase, 'VERIFY_ID');
+  assert.equal(result.state.selectedCaseId, undefined);
+  assert.equal(result.state.memory.turnCount, 1);
+  assert.equal(result.state.memory.caller.role, 'representative');
+  assert.equal(result.state.memory.caller.relationship, 'son');
+  assert.equal(result.state.memory.policy.policyNumber, 'POL-9921');
+  assert.equal(result.state.memory.intent.topic, 'denial');
+  assert.equal(result.state.memory.claim.type, 'healthcare');
+  assert.equal(result.state.memory.claim.statusHint, 'denied');
+  assert.deepEqual(result.state.memory.claim.approximateDate, {
+    month: 1,
+    year: 2026,
+  });
+  assert.deepEqual(result.state.memory.claim.caseIdentifiers, ['CL-2048']);
+  assert.equal(result.state.memory.emotion.current, 'frustrated');
+  assert.equal(result.state.memory.postProcess.preferenceHint, 'send');
+  assert.equal(result.state.memory.postProcess.finalConsent, undefined);
+  assert.doesNotMatch(result.reply, /CL-2048|pathology|office note/i);
+});
+
+test('an early case identifier is stored but only used after verification', () => {
+  let result = turn(
+    createInitialState(),
+    'I have a question about claim CL-2048.',
+  );
+  assert.equal(result.state.phase, 'VERIFY_ID');
+  assert.deepEqual(result.state.memory.claim.caseIdentifiers, ['CL-2048']);
+  assert.equal(getSelectedClaim(result.state, claims), undefined);
+  assert.doesNotMatch(result.reply, /denied|pathology|office note/i);
+
+  result = turn(
+    result.state,
+    'I am Margaret Chen, DOB 1985-03-15, SSN last four 4472.',
+  );
+  assert.equal(result.state.phase, 'PROCESS_CASE');
+  assert.equal(result.state.selectedCaseId, 'CL-2048');
+});
+
+test('identity evidence keeps normalized values and capture provenance across turns', () => {
+  let result = turn(createInitialState(), 'My phone is (650) 521-2836.');
+  assert.equal(
+    result.state.memory.identity.evidence.phone?.normalizedValue,
+    '6505212836',
+  );
+  assert.equal(
+    result.state.memory.identity.evidence.phone?.firstSeenPhase,
+    'VERIFY_ID',
+  );
+  result = turn(result.state, 'My email is MARGARET@EMAIL.COM.');
+  assert.equal(
+    result.state.memory.identity.evidence.email?.normalizedValue,
+    'margaret@email.com',
+  );
+  assert.equal(result.state.memory.turnCount, 2);
 });
 
 test('a refusal keeps the gate closed and offers unused alternatives', () => {
@@ -96,10 +158,23 @@ test('a refusal keeps the gate closed and offers unused alternatives', () => {
   );
 
   assert.equal(result.state.phase, 'VERIFY_ID');
-  assert.ok(result.state.refusedFields.includes('id_last4'));
+  assert.ok(result.state.memory.identity.refusedFields.includes('id_last4'));
   assert.match(result.reply, /don’t have to use/i);
   assert.match(result.reply, /human representative/i);
   assert.doesNotMatch(result.reply, /pathology|CL-2048/i);
+});
+
+test('human escalation requests are remembered and offered without disclosure', () => {
+  const result = turn(
+    createInitialState(),
+    'Please transfer me to a human representative.',
+  );
+
+  assert.equal(result.state.memory.escalation.requested, true);
+  assert.equal(result.state.memory.escalation.requestCount, 1);
+  assert.equal(result.state.memory.escalation.offered, true);
+  assert.equal(result.state.phase, 'VERIFY_ID');
+  assert.doesNotMatch(result.reply, /CL-\d+|pathology|office note/i);
 });
 
 test('emotion is acknowledged without bypassing verification', () => {
@@ -121,8 +196,8 @@ test('three mismatch attempts offer human escalation without disclosing a claim'
   const result = turn(state, 'DOB 1997-01-01.');
 
   assert.equal(result.state.phase, 'VERIFY_ID');
-  assert.equal(result.state.mismatchAttempts, 3);
-  assert.equal(result.state.escalationOffered, true);
+  assert.equal(result.state.memory.identity.failedAttempts, 3);
+  assert.equal(result.state.memory.escalation.offered, true);
   assert.match(result.reply, /human representative/i);
   assert.doesNotMatch(result.reply, /CL-\d+/);
 });
@@ -155,4 +230,6 @@ test('workflow can reach post-process only from an authenticated selected case',
     'POST_PROCESS',
   ]);
   assert.match(result.reply, /email summary/i);
+  result = turn(result.state, 'Yes, please send it.');
+  assert.equal(result.state.memory.postProcess.finalConsent, 'send');
 });

@@ -46,17 +46,65 @@ export type IntentHints = {
   topic?: 'denial' | 'status' | 'documents' | 'general';
 };
 
+export type EmotionalState =
+  | 'neutral'
+  | 'frustrated'
+  | 'angry'
+  | 'anxious'
+  | 'confused';
+
+export type IdentityEvidence = {
+  normalizedValue: string;
+  status: 'observed' | 'matched' | 'mismatched';
+  firstSeenPhase: Phase;
+  lastSeenTurn: number;
+};
+
+export type ConversationMemory = {
+  turnCount: number;
+  identity: {
+    evidence: Partial<Record<IdentityField, IdentityEvidence>>;
+    matchedFields: IdentityField[];
+    refusedFields: IdentityField[];
+    failedAttempts: number;
+  };
+  caller: {
+    role?: 'policyholder' | 'representative' | 'unknown';
+    relationship?: string;
+  };
+  policy: {
+    policyNumber?: string;
+  };
+  intent: {
+    topic?: IntentHints['topic'];
+  };
+  claim: {
+    type?: string;
+    approximateDate?: { month?: number; year?: number };
+    statusHint?: string;
+    caseIdentifiers: string[];
+  };
+  emotion: {
+    current: EmotionalState;
+    history: Array<{ state: EmotionalState; turn: number }>;
+  };
+  escalation: {
+    requested: boolean;
+    requestCount: number;
+    offered: boolean;
+  };
+  postProcess: {
+    preferenceHint?: 'send' | 'skip';
+    finalConsent?: 'send' | 'skip';
+  };
+};
+
 export type WorkflowState = {
   phase: Phase;
   phaseHistory: Phase[];
   candidatePartyId?: string;
-  matchedFields: IdentityField[];
-  mismatchAttempts: number;
-  refusedFields: IdentityField[];
-  intentHints: IntentHints;
   selectedCaseId?: string;
-  escalationOffered: boolean;
-  postProcessChoice?: 'send' | 'skip';
+  memory: ConversationMemory;
 };
 
 export type WorkflowData = {
@@ -106,11 +154,22 @@ export function createInitialState(): WorkflowState {
   return {
     phase: 'VERIFY_ID',
     phaseHistory: ['VERIFY_ID'],
-    matchedFields: [],
-    mismatchAttempts: 0,
-    refusedFields: [],
-    intentHints: {},
-    escalationOffered: false,
+    memory: {
+      turnCount: 0,
+      identity: {
+        evidence: {},
+        matchedFields: [],
+        refusedFields: [],
+        failedAttempts: 0,
+      },
+      caller: {},
+      policy: {},
+      intent: {},
+      claim: { caseIdentifiers: [] },
+      emotion: { current: 'neutral', history: [] },
+      escalation: { requested: false, requestCount: 0, offered: false },
+      postProcess: {},
+    },
   };
 }
 
@@ -188,7 +247,10 @@ function extractIntentHints(text: string, previous: IntentHints): IntentHints {
   for (const [month, number] of Object.entries(MONTHS)) {
     if (normalized.includes(month)) next.month = number;
   }
-  const year = text.match(/\b(20\d{2})\b/)?.[1];
+  const year = [...text.matchAll(/\b(20\d{2})\b/g)].find((match) => {
+    const prefix = text.slice(Math.max(0, (match.index ?? 0) - 3), match.index);
+    return !/CL[-\s]/i.test(prefix);
+  })?.[1];
   if (year) next.year = Number(year);
   if (/\bhealth(?:care)?\b|\bmedical\b/.test(normalized)) next.caseType = 'healthcare';
   if (/\bdental\b/.test(normalized)) next.caseType = 'dental';
@@ -286,20 +348,171 @@ function isUpset(text: string): boolean {
   return /ridiculous|frustrat|angry|annoy|already told|waste of time|unacceptable/i.test(text);
 }
 
+function detectEmotion(text: string): EmotionalState {
+  if (/furious|angry|unacceptable|outrage/i.test(text)) return 'angry';
+  if (/ridiculous|frustrat|annoy|already told|waste of time/i.test(text)) {
+    return 'frustrated';
+  }
+  if (/anxious|worried|scared|nervous|concerned/i.test(text)) return 'anxious';
+  if (/confused|don'?t understand|unclear|what do you mean/i.test(text)) {
+    return 'confused';
+  }
+  return 'neutral';
+}
+
+function detectCallerContext(text: string): ConversationMemory['caller'] {
+  const relationship = text.match(
+    /\b(son|daughter|spouse|wife|husband|parent|mother|father|guardian|attorney)\b/i,
+  )?.[1].toLowerCase();
+  if (/\b(on behalf of|representing|representative)\b/i.test(text) || relationship) {
+    return { role: 'representative', relationship };
+  }
+  if (/\b(policyholder|my policy|my claim|my insurance)\b/i.test(text)) {
+    return { role: 'policyholder' };
+  }
+  return {};
+}
+
+function detectPostProcessPreference(text: string): 'send' | 'skip' | undefined {
+  if (/\b(?:don'?t|do not|skip|no)\b.{0,24}\b(?:email|summary)\b/i.test(text)) {
+    return 'skip';
+  }
+  if (/\b(?:email|send)\b.{0,30}\bsummary\b|\bsummary\b.{0,30}\bemail\b/i.test(text)) {
+    return 'send';
+  }
+  return undefined;
+}
+
+function normalizeEvidence(field: IdentityField, value: string): string {
+  if (field === 'name') return normalizeName(value);
+  if (field === 'phone') return normalizePhone(value);
+  if (field === 'email') return value.toLowerCase();
+  if (field === 'dob') return normalizeDate(value) ?? value;
+  return value.replace(/\D/g, '').slice(-4);
+}
+
+function captureMessageMemory(
+  current: WorkflowState,
+  text: string,
+  data: WorkflowData,
+): {
+  memory: ConversationMemory;
+  extractedIdentity: ExtractedIdentity;
+  refusedField?: IdentityField;
+} {
+  const turn = current.memory.turnCount + 1;
+  const extractedIdentity = extractIdentity(text, data.policyholders);
+  const refusedField = detectRefusedField(text);
+  const previousHints: IntentHints = {
+    caseType: current.memory.claim.type,
+    status: current.memory.claim.statusHint,
+    month: current.memory.claim.approximateDate?.month,
+    year: current.memory.claim.approximateDate?.year,
+    topic: current.memory.intent.topic,
+  };
+  const hints = extractIntentHints(text, previousHints);
+  const caller = detectCallerContext(text);
+  const emotion = detectEmotion(text);
+  const escalationRequested = /\b(human|representative|agent|transfer me)\b/i.test(text);
+  const preferenceHint = detectPostProcessPreference(text);
+  const caseIdentifiers = [
+    ...current.memory.claim.caseIdentifiers,
+    ...(text.match(/\bCL[-\s]?\d{4}\b/gi) ?? []).map((value) =>
+      value.toUpperCase().replace(/\s/g, '-'),
+    ),
+  ].filter((value, index, values) => values.indexOf(value) === index);
+
+  const evidence = { ...current.memory.identity.evidence };
+  for (const field of Object.keys(IDENTITY_LABELS) as IdentityField[]) {
+    const value = extractedIdentity[field];
+    if (!value) continue;
+    evidence[field] = {
+      normalizedValue: normalizeEvidence(field, value),
+      status: evidence[field]?.status ?? 'observed',
+      firstSeenPhase: evidence[field]?.firstSeenPhase ?? current.phase,
+      lastSeenTurn: turn,
+    };
+  }
+
+  const refusedFields = [...current.memory.identity.refusedFields];
+  if (refusedField && !refusedFields.includes(refusedField)) {
+    refusedFields.push(refusedField);
+  }
+
+  return {
+    extractedIdentity,
+    refusedField,
+    memory: {
+      turnCount: turn,
+      identity: {
+        evidence,
+        matchedFields: [...current.memory.identity.matchedFields],
+        refusedFields,
+        failedAttempts: current.memory.identity.failedAttempts,
+      },
+      caller: {
+        role: caller.role ?? current.memory.caller.role,
+        relationship: caller.relationship ?? current.memory.caller.relationship,
+      },
+      policy: {
+        policyNumber:
+          extractedIdentity.policyNumber ?? current.memory.policy.policyNumber,
+      },
+      intent: { topic: hints.topic ?? current.memory.intent.topic },
+      claim: {
+        type: hints.caseType ?? current.memory.claim.type,
+        approximateDate:
+          hints.month || hints.year
+            ? { month: hints.month, year: hints.year }
+            : current.memory.claim.approximateDate,
+        statusHint: hints.status ?? current.memory.claim.statusHint,
+        caseIdentifiers,
+      },
+      emotion: {
+        current: emotion,
+        history:
+          emotion === 'neutral'
+            ? [...current.memory.emotion.history]
+            : [...current.memory.emotion.history, { state: emotion, turn }],
+      },
+      escalation: {
+        requested: current.memory.escalation.requested || escalationRequested,
+        requestCount:
+          current.memory.escalation.requestCount + (escalationRequested ? 1 : 0),
+        offered: current.memory.escalation.offered,
+      },
+      postProcess: {
+        preferenceHint:
+          preferenceHint ?? current.memory.postProcess.preferenceHint,
+        finalConsent: current.memory.postProcess.finalConsent,
+      },
+    },
+  };
+}
+
 function resolveClaim(state: WorkflowState, data: WorkflowData): Claim | undefined {
   if (!state.candidatePartyId) return undefined;
   let candidates = data.claims.filter(
     (claim) => claim.party_id === state.candidatePartyId,
   );
-  const hints = state.intentHints;
-  if (hints.caseType) candidates = candidates.filter((claim) => claim.case_type === hints.caseType);
-  if (hints.status) candidates = candidates.filter((claim) => claim.status === hints.status);
-  if (hints.month) {
-    candidates = candidates.filter(
-      (claim) => Number(claim.created_at.slice(5, 7)) === hints.month,
+  const hints = state.memory.claim;
+  if (hints.caseIdentifiers.length) {
+    candidates = candidates.filter((claim) =>
+      hints.caseIdentifiers.includes(claim.case_id),
     );
   }
-  if (hints.year) candidates = candidates.filter((claim) => Number(claim.created_at.slice(0, 4)) === hints.year);
+  if (hints.type) candidates = candidates.filter((claim) => claim.case_type === hints.type);
+  if (hints.statusHint) candidates = candidates.filter((claim) => claim.status === hints.statusHint);
+  if (hints.approximateDate?.month) {
+    candidates = candidates.filter(
+      (claim) => Number(claim.created_at.slice(5, 7)) === hints.approximateDate?.month,
+    );
+  }
+  if (hints.approximateDate?.year) {
+    candidates = candidates.filter(
+      (claim) => Number(claim.created_at.slice(0, 4)) === hints.approximateDate?.year,
+    );
+  }
   return candidates.length === 1 ? candidates[0] : undefined;
 }
 
@@ -308,16 +521,17 @@ function safeVerificationReply(
   upset: boolean,
   refused?: IdentityField,
 ): string {
+  const identity = state.memory.identity;
   const empathy = upset
     ? 'I hear how frustrating this is, and I’m sorry for the extra step. '
     : '';
-  if (state.mismatchAttempts >= 3) {
+  if (identity.failedAttempts >= 3) {
     return `${empathy}I couldn’t complete automated verification after several attempts. I still can’t disclose claim information, but I can connect you with a human representative.`;
   }
   const remaining = (Object.keys(IDENTITY_LABELS) as IdentityField[]).filter(
-    (field) => !state.matchedFields.includes(field) && field !== refused,
+    (field) => !identity.matchedFields.includes(field) && field !== refused,
   );
-  const needed = 3 - state.matchedFields.length;
+  const needed = 3 - identity.matchedFields.length;
   if (refused) {
     return `${empathy}That’s okay—you don’t have to use your ${IDENTITY_LABELS[refused]}. To protect your claim information, please use ${needed} more ${needed === 1 ? 'detail' : 'details'} from: ${remaining.map((field) => IDENTITY_LABELS[field]).join(', ')}. You can also ask for a human representative.`;
   }
@@ -345,46 +559,79 @@ export function processMessage(
   text: string,
   data: WorkflowData,
 ): WorkflowTurn {
+  const captured = captureMessageMemory(current, text, data);
   let state: WorkflowState = {
     ...current,
     phaseHistory: [...current.phaseHistory],
-    matchedFields: [...current.matchedFields],
-    refusedFields: [...current.refusedFields],
-    intentHints: extractIntentHints(text, current.intentHints),
+    memory: captured.memory,
   };
 
   if (state.phase === 'VERIFY_ID') {
     if (/\b(human|representative|agent|transfer me)\b/i.test(text)) {
       return {
-        state: { ...state, escalationOffered: true },
+        state: {
+          ...state,
+          memory: {
+            ...state.memory,
+            escalation: { ...state.memory.escalation, offered: true },
+          },
+        },
         reply: 'I can connect you with a human representative. Until they complete verification, I still can’t disclose claim information.',
       };
     }
 
-    const refused = detectRefusedField(text);
-    if (refused && !state.refusedFields.includes(refused)) {
-      state.refusedFields.push(refused);
-    }
-    const extracted = extractIdentity(text, data.policyholders);
+    const refused = captured.refusedField;
+    const extracted = captured.extractedIdentity;
     const holder = locateCandidate(extracted, data, state.candidatePartyId);
     if (holder) state.candidatePartyId = holder.party_id;
 
     let turnHadMismatch = false;
+    const evidence = { ...state.memory.identity.evidence };
+    const matchedFields = [...state.memory.identity.matchedFields];
     if (holder) {
       for (const field of Object.keys(IDENTITY_LABELS) as IdentityField[]) {
         const value = extracted[field];
-        if (!value || state.matchedFields.includes(field)) continue;
-        if (identityMatches(field, value, holder)) state.matchedFields.push(field);
-        else turnHadMismatch = true;
+        if (!value || matchedFields.includes(field)) continue;
+        if (identityMatches(field, value, holder)) {
+          matchedFields.push(field);
+          if (evidence[field]) evidence[field] = { ...evidence[field], status: 'matched' };
+        } else {
+          turnHadMismatch = true;
+          if (evidence[field]) evidence[field] = { ...evidence[field], status: 'mismatched' };
+        }
       }
     }
-    if (turnHadMismatch) state.mismatchAttempts += 1;
+    state = {
+      ...state,
+      memory: {
+        ...state.memory,
+        identity: {
+          ...state.memory.identity,
+          evidence,
+          matchedFields,
+          failedAttempts:
+            state.memory.identity.failedAttempts + (turnHadMismatch ? 1 : 0),
+        },
+      },
+    };
 
-    if (state.matchedFields.length < 3) {
-      if (state.mismatchAttempts >= 3) state.escalationOffered = true;
+    if (state.memory.identity.matchedFields.length < 3) {
+      if (state.memory.identity.failedAttempts >= 3) {
+        state = {
+          ...state,
+          memory: {
+            ...state.memory,
+            escalation: { ...state.memory.escalation, offered: true },
+          },
+        };
+      }
       return {
         state,
-        reply: safeVerificationReply(state, isUpset(text), refused),
+        reply: safeVerificationReply(
+          state,
+          state.memory.emotion.current !== 'neutral' || isUpset(text),
+          refused,
+        ),
       };
     }
 
@@ -421,7 +668,13 @@ export function processMessage(
     const claim = data.claims.find((item) => item.case_id === state.selectedCaseId);
     if (!claim) {
       return {
-        state: { ...state, escalationOffered: true },
+        state: {
+          ...state,
+          memory: {
+            ...state.memory,
+            escalation: { ...state.memory.escalation, offered: true },
+          },
+        },
         reply: 'I can’t access the selected claim record right now. I can connect you with a human representative.',
       };
     }
@@ -437,13 +690,33 @@ export function processMessage(
 
   if (/\b(yes|send|email it|please do)\b/i.test(text)) {
     return {
-      state: { ...state, postProcessChoice: 'send' },
+      state: {
+        ...state,
+        memory: {
+          ...state.memory,
+          postProcess: {
+            ...state.memory.postProcess,
+            preferenceHint: 'send',
+            finalConsent: 'send',
+          },
+        },
+      },
       reply: 'Your email-summary choice is recorded for this demo. The conversation is complete.',
     };
   }
   if (/\b(no|skip|don'?t|do not)\b/i.test(text)) {
     return {
-      state: { ...state, postProcessChoice: 'skip' },
+      state: {
+        ...state,
+        memory: {
+          ...state.memory,
+          postProcess: {
+            ...state.memory.postProcess,
+            preferenceHint: 'skip',
+            finalConsent: 'skip',
+          },
+        },
+      },
       reply: 'No problem—I’ll skip the email summary. The conversation is complete.',
     };
   }
@@ -459,4 +732,48 @@ export function getSelectedClaim(
 ): Claim | undefined {
   if (state.phase === 'VERIFY_ID' || state.phase === 'RESOLVE_INTENT') return undefined;
   return claims.find((claim) => claim.case_id === state.selectedCaseId);
+}
+
+export function getSafeMemorySummary(state: WorkflowState): string[] {
+  const summary: string[] = [];
+  const memory = state.memory;
+  const observedIdentity = Object.keys(memory.identity.evidence) as IdentityField[];
+  if (observedIdentity.length) {
+    summary.push(`Identity: ${observedIdentity.map((field) => IDENTITY_LABELS[field]).join(', ')}`);
+  }
+  if (memory.caller.role) {
+    summary.push(
+      `Caller: ${memory.caller.role}${memory.caller.relationship ? ` (${memory.caller.relationship})` : ''}`,
+    );
+  }
+  if (memory.policy.policyNumber) summary.push('Policy hint captured');
+  if (memory.intent.topic) summary.push(`Intent: ${memory.intent.topic}`);
+  if (memory.claim.type) summary.push(`Claim type: ${memory.claim.type}`);
+  if (memory.claim.approximateDate?.month) {
+    const month = Object.entries(MONTHS).find(
+      ([, number]) => number === memory.claim.approximateDate?.month,
+    )?.[0];
+    if (month) summary.push(`Date hint: ${month}`);
+  }
+  if (memory.claim.approximateDate?.year) {
+    summary.push(`Year hint: ${memory.claim.approximateDate.year}`);
+  }
+  if (memory.claim.statusHint) summary.push(`Status hint: ${memory.claim.statusHint}`);
+  if (memory.claim.caseIdentifiers.length) summary.push('Case ID hint captured');
+  if (memory.emotion.current !== 'neutral') {
+    summary.push(`Emotion: ${memory.emotion.current}`);
+  }
+  if (memory.identity.refusedFields.length) {
+    summary.push(
+      `Refused: ${memory.identity.refusedFields.map((field) => IDENTITY_LABELS[field]).join(', ')}`,
+    );
+  }
+  if (memory.identity.failedAttempts) {
+    summary.push(`Failed attempts: ${memory.identity.failedAttempts}`);
+  }
+  if (memory.escalation.requested) summary.push('Human help requested');
+  if (memory.postProcess.preferenceHint) {
+    summary.push(`Email preference: ${memory.postProcess.preferenceHint}`);
+  }
+  return summary;
 }

@@ -6,6 +6,7 @@ import policyholderData from '../../fixtures/policyholders.json';
 import {
   PHASES,
   createInitialState,
+  getSafeMemorySummary,
   getSelectedClaim,
   processMessage,
   type Claim,
@@ -54,20 +55,10 @@ export default function Home() {
   const selectedClaim = getSelectedClaim(workflow, claims);
   const activePhaseIndex = PHASES.indexOf(workflow.phase);
 
-  const rememberedHints = useMemo(() => {
-    const hints: string[] = [];
-    if (workflow.intentHints.status) hints.push(workflow.intentHints.status);
-    if (workflow.intentHints.caseType) hints.push(workflow.intentHints.caseType);
-    if (workflow.intentHints.month) {
-      hints.push(
-        new Intl.DateTimeFormat('en', { month: 'long' }).format(
-          new Date(2026, workflow.intentHints.month - 1, 1),
-        ),
-      );
-    }
-    if (workflow.intentHints.year) hints.push(String(workflow.intentHints.year));
-    return hints;
-  }, [workflow.intentHints]);
+  const rememberedHints = useMemo(
+    () => getSafeMemorySummary(workflow),
+    [workflow],
+  );
 
   function sendMessage(text: string) {
     const trimmed = text.trim();
@@ -175,12 +166,12 @@ export default function Home() {
         <aside className="space-y-4">
           <section className="rounded-[28px] border border-[#dce5df] bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between gap-3">
-              <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6b7c72]">Verification gate</p><div className="mt-4 flex items-end gap-2"><span className="text-4xl font-semibold">{workflow.matchedFields.length}</span><span className="pb-1 text-sm text-[#74837b]">of 3 matched</span></div></div>
-              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${workflow.matchedFields.length >= 3 ? 'bg-[#dff3e8] text-[#12633f]' : 'bg-[#f7ead0] text-[#805a13]'}`}>{workflow.matchedFields.length >= 3 ? 'Verified' : 'Protected'}</span>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#6b7c72]">Verification gate</p><div className="mt-4 flex items-end gap-2"><span className="text-4xl font-semibold">{workflow.memory.identity.matchedFields.length}</span><span className="pb-1 text-sm text-[#74837b]">of 3 matched</span></div></div>
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${workflow.memory.identity.matchedFields.length >= 3 ? 'bg-[#dff3e8] text-[#12633f]' : 'bg-[#f7ead0] text-[#805a13]'}`}>{workflow.memory.identity.matchedFields.length >= 3 ? 'Verified' : 'Protected'}</span>
             </div>
-            <div className="mt-4 grid grid-cols-3 gap-2">{[0, 1, 2].map((item) => <span key={item} className={`h-2 rounded-full ${workflow.matchedFields.length > item ? 'bg-[#229164]' : 'bg-[#e2e9e5]'}`} />)}</div>
+            <div className="mt-4 grid grid-cols-3 gap-2">{[0, 1, 2].map((item) => <span key={item} className={`h-2 rounded-full ${workflow.memory.identity.matchedFields.length > item ? 'bg-[#229164]' : 'bg-[#e2e9e5]'}`} />)}</div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {workflow.matchedFields.length ? workflow.matchedFields.map((field) => <span key={field} className="rounded-full bg-[#edf5f0] px-2.5 py-1 text-[11px] font-medium text-[#315b46]">✓ {FIELD_LABELS[field]}</span>) : <span className="text-sm text-[#708078]">No approved fields matched yet.</span>}
+              {workflow.memory.identity.matchedFields.length ? workflow.memory.identity.matchedFields.map((field) => <span key={field} className="rounded-full bg-[#edf5f0] px-2.5 py-1 text-[11px] font-medium text-[#315b46]">✓ {FIELD_LABELS[field]}</span>) : <span className="text-sm text-[#708078]">No approved fields matched yet.</span>}
             </div>
             <p className="mt-4 border-t border-[#edf1ee] pt-4 text-sm leading-6 text-[#607168]">Policy numbers help find an account, but never count toward the three-field threshold.</p>
           </section>
@@ -189,7 +180,7 @@ export default function Home() {
             <section className="rounded-[28px] border border-[#dce5df] bg-[#e8f3ed] p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#557565]">Remembered safely</p>
               <div className="mt-3 flex flex-wrap gap-2">{rememberedHints.map((hint) => <span key={hint} className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-medium capitalize text-[#28563f]">{hint}</span>)}</div>
-              <p className="mt-3 text-sm leading-6 text-[#536d60]">These caller-provided hints are saved for later, but cannot unlock claim details.</p>
+              <p className="mt-3 text-sm leading-6 text-[#536d60]">Every turn is categorized immediately. These observations can guide later phases, but cannot unlock claim details.</p>
             </section>
           )}
 
@@ -201,7 +192,7 @@ export default function Home() {
             </section>
           )}
 
-          {workflow.escalationOffered && (
+          {workflow.memory.escalation.offered && (
             <section className="rounded-[28px] border border-[#ead2a5] bg-[#fff8e9] p-6">
               <p className="font-semibold text-[#704c0d]">Human support available</p>
               <p className="mt-2 text-sm leading-6 text-[#795f2d]">The automated gate stays closed while a representative takes over verification.</p>

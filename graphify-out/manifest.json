@@ -1,0 +1,202 @@
+{
+  ".codex/hooks.json": {
+    "mtime": 1789669349.2581813,
+    "ast_hash": "4c131539d3d2030ce3aa64005c024518",
+    "semantic_hash": "4c131539d3d2030ce3aa64005c024518"
+  },
+  "apps/insurance_claims/fixtures/claim_schema.json": {
+    "mtime": 1774838292.0,
+    "ast_hash": "843f24b70aee5fdbf8a19fdf4ae28c0b",
+    "semantic_hash": "843f24b70aee5fdbf8a19fdf4ae28c0b"
+  },
+  "apps/insurance_claims/fixtures/claims.json": {
+    "mtime": 1787963044.0,
+    "ast_hash": "268a9f088a2a62274d1bffae4b432871",
+    "semantic_hash": "268a9f088a2a62274d1bffae4b432871"
+  },
+  "apps/insurance_claims/fixtures/consent_scenarios.json": {
+    "mtime": 1774838292.0,
+    "ast_hash": "edc504bd1cccf90b1ea34957edd43774",
+    "semantic_hash": "edc504bd1cccf90b1ea34957edd43774"
+  },
+  "apps/insurance_claims/fixtures/policyholders.json": {
+    "mtime": 1787963044.0,
+    "ast_hash": "84a0dea3c9d562328a6121a4798be59b",
+    "semantic_hash": "84a0dea3c9d562328a6121a4798be59b"
+  },
+  "apps/insurance_claims/fixtures/representatives.json": {
+    "mtime": 1774838292.0,
+    "ast_hash": "1b835f8c540a967e12c433ebae62fa89",
+    "semantic_hash": "1b835f8c540a967e12c433ebae62fa89"
+  },
+  "apps/insurance_claims/fixtures/required_document_guideline.json": {
+    "mtime": 1787963044.0,
+    "ast_hash": "44ae6fb07259ffdbf0a41dad09658d85",
+    "semantic_hash": "44ae6fb07259ffdbf0a41dad09658d85"
+  },
+  ".agents/skills/architecture-first-changes/SKILL.md": {
+    "mtime": 1789669103.0016181,
+    "ast_hash": "9e24a19d4fe38f44721f824681f14ca8",
+    "semantic_hash": "9e24a19d4fe38f44721f824681f14ca8"
+  },
+  ".agents/skills/atomic-git-commits/SKILL.md": {
+    "mtime": 1789669103.0032544,
+    "ast_hash": "88b7cce9c996a158861de074dee4ba70",
+    "semantic_hash": "88b7cce9c996a158861de074dee4ba70"
+  },
+  ".agents/skills/continuous-integration/SKILL.md": {
+    "mtime": 1789669103.0043912,
+    "ast_hash": "cfc76f0f7047564dac5e4416067585da",
+    "semantic_hash": "cfc76f0f7047564dac5e4416067585da"
+  },
+  ".agents/skills/investigation-debugging/SKILL.md": {
+    "mtime": 1789669103.0020196,
+    "ast_hash": "a25b35e7283a6b73731227f73a740c73",
+    "semantic_hash": "a25b35e7283a6b73731227f73a740c73"
+  },
+  ".agents/skills/large-feature-decomposition/SKILL.md": {
+    "mtime": 1789669103.0052326,
+    "ast_hash": "7b6534ff7e01c734314b90c94d85b404",
+    "semantic_hash": "7b6534ff7e01c734314b90c94d85b404"
+  },
+  ".agents/skills/minimal-context-coding/SKILL.md": {
+    "mtime": 1789669103.0048506,
+    "ast_hash": "5df502fa6cd7c61342da407c8dd16c07",
+    "semantic_hash": "5df502fa6cd7c61342da407c8dd16c07"
+  },
+  ".codex/skills/graphify/SKILL.md": {
+    "mtime": 1789669349.2621732,
+    "ast_hash": "addc33b2f59fe59c9213f773287d1987",
+    "semantic_hash": "addc33b2f59fe59c9213f773287d1987"
+  },
+  ".codex/skills/graphify/references/add-watch.md": {
+    "mtime": 1789669349.2618408,
+    "ast_hash": "d59d027fe449f06aa03905a01184e779",
+    "semantic_hash": "d59d027fe449f06aa03905a01184e779"
+  },
+  ".codex/skills/graphify/references/exports.md": {
+    "mtime": 1789669349.260897,
+    "ast_hash": "9da2a2152e60a22f07f05fed5158f287",
+    "semantic_hash": "9da2a2152e60a22f07f05fed5158f287"
+  },
+  ".codex/skills/graphify/references/extraction-spec.md": {
+    "mtime": 1789669349.2612178,
+    "ast_hash": "bf895ec4d4e40f5f66f7d31c2a9bd4a7",
+    "semantic_hash": "bf895ec4d4e40f5f66f7d31c2a9bd4a7"
+  },
+  ".codex/skills/graphify/references/github-and-merge.md": {
+    "mtime": 1789669349.260354,
+    "ast_hash": "cde13df085e4c492aeb7ba298a996d0d",
+    "semantic_hash": "cde13df085e4c492aeb7ba298a996d0d"
+  },
+  ".codex/skills/graphify/references/hooks.md": {
+    "mtime": 1789669349.2616923,
+    "ast_hash": "3f545db6ce646650bb9de588f5512a27",
+    "semantic_hash": "3f545db6ce646650bb9de588f5512a27"
+  },
+  ".codex/skills/graphify/references/query.md": {
+    "mtime": 1789669349.2607102,
+    "ast_hash": "3c46f8ad006874260614ed8657d02307",
+    "semantic_hash": "3c46f8ad006874260614ed8657d02307"
+  },
+  ".codex/skills/graphify/references/transcribe.md": {
+    "mtime": 1789669349.260061,
+    "ast_hash": "67b6a5fa6c0974e18f60db9f8932fbd8",
+    "semantic_hash": "67b6a5fa6c0974e18f60db9f8932fbd8"
+  },
+  ".codex/skills/graphify/references/update.md": {
+    "mtime": 1789669349.261546,
+    "ast_hash": "c698309979460d0f02ba616417844399",
+    "semantic_hash": "c698309979460d0f02ba616417844399"
+  },
+  "AGENTS.md": {
+    "mtime": 1789668817.151434,
+    "ast_hash": "6a47d64fcc136324ca395065a707ef76",
+    "semantic_hash": "6a47d64fcc136324ca395065a707ef76"
+  },
+  "apps/insurance_claims/demo/.openai/hosting.json": {
+    "mtime": 1789671062.146842,
+    "ast_hash": "3b842878b17bee9735d706d4c1eb0abc",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/.vinext/dev/lock.json": {
+    "mtime": 1789671235.6415005,
+    "ast_hash": "58a01d06cf82ce215bdf3060c5532736",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/.wrangler/deploy/config.json": {
+    "mtime": 1789671252.6976032,
+    "ast_hash": "9d663abcd158c67f171c437cb71f9503",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/app/layout.tsx": {
+    "mtime": 1789671062.1472774,
+    "ast_hash": "b072ea17ac267c8566a3a5bd66402fd5",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/app/page.tsx": {
+    "mtime": 1789670985.182969,
+    "ast_hash": "6f8ac082fd79d929a2011cd046de6bea",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/eslint.config.mjs": {
+    "mtime": 1789670449.9657724,
+    "ast_hash": "1db8c689e2dc9b68d8535cf62572375d",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/lib/claims-workflow.test.ts": {
+    "mtime": 1789670899.1665256,
+    "ast_hash": "e59667629b449fa941f110a8f8a94481",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/lib/claims-workflow.ts": {
+    "mtime": 1789670845.8613982,
+    "ast_hash": "4c6648bb4a944eeafb65dbca02eacf3d",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/next-env.d.ts": {
+    "mtime": 1789670585.9504623,
+    "ast_hash": "61a9e8d2df61ba625f11cbbf664500bb",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/next.config.ts": {
+    "mtime": 1789670449.9660244,
+    "ast_hash": "3921ec810fe855174bf481cf23f86516",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/package.json": {
+    "mtime": 1789671220.9983945,
+    "ast_hash": "a4091a54da1e562dd3cb7681ac29cb4e",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/tsconfig.json": {
+    "mtime": 1789670899.1691823,
+    "ast_hash": "e7aa8864f2c5f888d93f769984338105",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/vite.config.ts": {
+    "mtime": 1789671243.3427699,
+    "ast_hash": "8938eb172a3f3aee3b9b9bf3f682ccda",
+    "semantic_hash": ""
+  },
+  ".github/workflows/insurance-demo-ci.yml": {
+    "mtime": 1789671085.771054,
+    "ast_hash": "c52bc6ea99db90a9a98da44a50b79bd9",
+    "semantic_hash": ""
+  },
+  ".tmp-assets/atlas-claims-og.png": {
+    "mtime": 1789670681.3093631,
+    "ast_hash": "535a90c7a9c8104247a324c02e9cdc55",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/public/favicon.svg": {
+    "mtime": 1789670449.9641464,
+    "ast_hash": "65d2d7d0b0f2cb5580c3808f8282568d",
+    "semantic_hash": ""
+  },
+  "apps/insurance_claims/demo/public/og.png": {
+    "mtime": 1789671053.523981,
+    "ast_hash": "535a90c7a9c8104247a324c02e9cdc55",
+    "semantic_hash": ""
+  }
+}

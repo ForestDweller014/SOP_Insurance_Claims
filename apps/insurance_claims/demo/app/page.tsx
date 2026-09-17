@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import claimData from '../../fixtures/claims.json';
 import policyholderData from '../../fixtures/policyholders.json';
+import documentGuidanceData from '../../fixtures/required_document_guideline.json';
 import {
   PHASES,
   createInitialState,
@@ -12,11 +13,13 @@ import {
   type Claim,
   type IdentityField,
   type Policyholder,
+  type RequiredDocumentGuidance,
 } from '../lib/claims-workflow';
 
 const claims = claimData as Claim[];
 const policyholders = policyholderData as Policyholder[];
-const workflowData = { claims, policyholders };
+const documentGuidance = documentGuidanceData as RequiredDocumentGuidance;
+const workflowData = { claims, policyholders, documentGuidance };
 
 const PHASE_COPY = {
   VERIFY_ID: ['Verify identity', 'Collect 3 approved matches'],

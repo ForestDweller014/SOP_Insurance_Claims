@@ -38,6 +38,32 @@ export type Claim = {
   net_fee: string;
 };
 
+type LocalizedText = { en: string };
+
+export type RequiredDocumentGuidance = {
+  default_guidance: LocalizedText;
+  case_type_guidance: Record<string, LocalizedText>;
+  document_guidance: Record<string, LocalizedText>;
+  document_alternative_guidance: Record<string, LocalizedText>;
+  claim_followup_settings: {
+    average_processing_time_after_submission: LocalizedText;
+    human_review_after_document_alternatives_exhausted: LocalizedText;
+  };
+  claim_followup_guidance: Array<{
+    topic: string;
+    match_any?: string[];
+    en: string;
+  }>;
+  claim_followup_fallback: LocalizedText;
+};
+
+export type GroundedResponse = {
+  text: string;
+  topic: string;
+  sources: string[];
+  allowedActions: string[];
+};
+
 export type IntentHints = {
   caseType?: string;
   status?: string;
@@ -113,11 +139,17 @@ export type WorkflowState = {
   candidatePartyId?: string;
   selectedCaseId?: string;
   memory: ConversationMemory;
+  processing: {
+    discussedTopics: string[];
+    groundingSources: string[];
+    allowedActions: string[];
+  };
 };
 
 export type WorkflowData = {
   policyholders: Policyholder[];
   claims: Claim[];
+  documentGuidance?: RequiredDocumentGuidance;
 };
 
 export type WorkflowTurn = {
@@ -177,6 +209,11 @@ export function createInitialState(): WorkflowState {
       emotion: { current: 'neutral', history: [] },
       escalation: { requested: false, requestCount: 0, offered: false },
       postProcess: {},
+    },
+    processing: {
+      discussedTopics: [],
+      groundingSources: [],
+      allowedActions: [],
     },
   };
 }
@@ -610,20 +647,180 @@ function safeVerificationReply(
   return `${empathy}Claim information is protected, so I need ${needed} more matching ${needed === 1 ? 'detail' : 'details'} before I can continue. You may use: ${remaining.map((field) => IDENTITY_LABELS[field]).join(', ')}.`;
 }
 
-function groundedClaimReply(claim: Claim, text: string): string {
-  if (/why|reason|denied|denial/i.test(text) && claim.denial_reason) {
-    return `Claim ${claim.case_id} was denied because ${claim.denial_reason}. ${claim.documents_needed?.length ? `The file needs ${claim.documents_needed.join(' and ')}.` : ''}`.trim();
+const DOCUMENT_GUIDANCE_ALIASES: Record<string, string> = {
+  'pathology report': 'original pathology report',
+  'office note': 'treating provider office note',
+};
+
+function canonicalDocumentLabel(label: string): string {
+  return DOCUMENT_GUIDANCE_ALIASES[label.toLowerCase()] ?? label.toLowerCase();
+}
+
+function joinDocuments(documents: string[]): string {
+  return documents.join(documents.length > 1 ? ' and ' : '');
+}
+
+function documentDetails(
+  claim: Claim,
+  guidance: RequiredDocumentGuidance,
+  alternatives = false,
+): { text: string; sources: string[] } {
+  const guide = alternatives
+    ? guidance.document_alternative_guidance
+    : guidance.document_guidance;
+  const details = (claim.documents_needed ?? []).map((document) => {
+    const canonical = canonicalDocumentLabel(document);
+    const entry = guide[canonical] ?? (alternatives ? guide.default : undefined);
+    return {
+      text: entry ? `${document}: ${entry.en}` : undefined,
+      source: entry
+        ? `document_guideline:${alternatives ? 'alternative:' : ''}${canonical}`
+        : undefined,
+    };
+  });
+  return {
+    text: details.flatMap((detail) => (detail.text ? [detail.text] : [])).join(' '),
+    sources: details.flatMap((detail) =>
+      detail.source ? [detail.source] : [],
+    ),
+  };
+}
+
+function matchedFollowupGuidance(
+  text: string,
+  guidance: RequiredDocumentGuidance,
+) {
+  const normalized = normalizeText(text);
+  return guidance.claim_followup_guidance.find((entry) =>
+    entry.match_any?.some((phrase) => normalized.includes(normalizeText(phrase))),
+  );
+}
+
+function renderFollowup(
+  template: string,
+  claim: Claim,
+  guidance: RequiredDocumentGuidance,
+): string {
+  return template
+    .replaceAll('{case_id}', claim.case_id)
+    .replaceAll('{documents}', joinDocuments(claim.documents_needed ?? []))
+    .replaceAll(
+      '{average_processing_time_after_submission}',
+      guidance.claim_followup_settings.average_processing_time_after_submission.en,
+    );
+}
+
+export function groundedClaimReply(
+  claim: Claim,
+  text: string,
+  data?: WorkflowData,
+): GroundedResponse {
+  const baseSource = `claim_record:${claim.case_id}`;
+  const guidance = data?.documentGuidance;
+  const documents = claim.documents_needed ?? [];
+  const followup = guidance ? matchedFollowupGuidance(text, guidance) : undefined;
+
+  if (/\bappeal|deadline|last day\b/i.test(text)) {
+    return claim.appeal_deadline
+      ? {
+          text: `The claim record lists ${claim.appeal_deadline} as the appeal deadline for claim ${claim.case_id}.`,
+          topic: 'appeal_deadline',
+          sources: [baseSource],
+          allowedActions: ['explain_recorded_deadline', 'offer_human_review'],
+        }
+      : {
+          text: `The claim record does not list an appeal deadline for claim ${claim.case_id}. I won’t guess; a human representative can review the policy-specific options.`,
+          topic: 'appeal_deadline',
+          sources: [baseSource],
+          allowedActions: ['offer_human_review'],
+        };
   }
-  if (/document|need|submit|upload/i.test(text) && claim.documents_needed?.length) {
-    return `For claim ${claim.case_id}, the requested documents are ${claim.documents_needed.join(' and ')}. Use the member portal or claim upload link when possible so the files stay attached to the claim.`;
+
+  if (/\b(?:don'?t|do not|cannot|can'?t|missing|alternative|instead)\b/i.test(text) && documents.length && guidance) {
+    const details = documentDetails(claim, guidance, true);
+    return {
+      text: `For claim ${claim.case_id}, the requested items are ${joinDocuments(documents)}. ${details.text} ${guidance.claim_followup_settings.human_review_after_document_alternatives_exhausted.en}`,
+      topic: 'document_alternatives',
+      sources: [baseSource, ...details.sources, 'document_guideline:human_review'],
+      allowedActions: ['explain_document_alternatives', 'offer_human_review'],
+    };
+  }
+
+  if (followup && documents.length && guidance) {
+    return {
+      text: renderFollowup(followup.en, claim, guidance),
+      topic: followup.topic,
+      sources: [baseSource, `document_guideline:${followup.topic}`],
+      allowedActions: ['explain_submission_guidance', 'offer_human_review'],
+    };
+  }
+
+  if (/\bformat|file type|scan|pdf|image|clear enough\b/i.test(text) && documents.length && guidance) {
+    const details = documentDetails(claim, guidance);
+    return {
+      text: `For claim ${claim.case_id}, ${guidance.default_guidance.en} ${details.text}`,
+      topic: 'document_format',
+      sources: [baseSource, 'document_guideline:default', ...details.sources],
+      allowedActions: ['explain_document_requirements', 'offer_human_review'],
+    };
+  }
+
+  if (/why|reason|denied|denial/i.test(text) && claim.denial_reason) {
+    return {
+      text: `Claim ${claim.case_id} was denied because ${claim.denial_reason}. ${documents.length ? `The file needs ${joinDocuments(documents)}.` : ''}`.trim(),
+      topic: 'denial_reason',
+      sources: [baseSource],
+      allowedActions: ['explain_denial', 'list_required_documents'],
+    };
+  }
+  if (/document|need|submit|upload/i.test(text) && documents.length) {
+    const defaultGuidance = guidance?.default_guidance.en;
+    return {
+      text: `For claim ${claim.case_id}, the requested documents are ${joinDocuments(documents)}.${defaultGuidance ? ` ${defaultGuidance}` : ''}`,
+      topic: 'required_documents',
+      sources: [baseSource, ...(guidance ? ['document_guideline:default'] : [])],
+      allowedActions: ['list_required_documents', 'explain_submission_guidance'],
+    };
   }
   if (/status|progress/i.test(text)) {
-    return `Claim ${claim.case_id} is currently ${claim.status}. ${claim.summary}.`;
+    return {
+      text: `Claim ${claim.case_id} is currently ${claim.status}. ${claim.summary}.`,
+      topic: 'claim_status',
+      sources: [baseSource],
+      allowedActions: ['explain_status'],
+    };
   }
   if (/pay|amount|reimburse/i.test(text)) {
-    return `For claim ${claim.case_id}, the expected reimbursement is $${claim.expected_reimbursement_amount}, the allowed maximum is $${claim.allowed_max_amount}, and the finalized payment is $${claim.net_pay}.`;
+    return {
+      text: `For claim ${claim.case_id}, the expected reimbursement is $${claim.expected_reimbursement_amount}, the allowed maximum is $${claim.allowed_max_amount}, and the finalized payment is $${claim.net_pay}.`,
+      topic: 'financials',
+      sources: [baseSource],
+      allowedActions: ['explain_recorded_financials'],
+    };
   }
-  return `I can help with claim ${claim.case_id}. It is a ${claim.case_type} claim created on ${claim.created_at}, and its current status is ${claim.status}. Ask about the status, decision, requested documents, or payment information.`;
+  return {
+    text: `I can help with claim ${claim.case_id}. It is a ${claim.case_type} claim created on ${claim.created_at}, and its current status is ${claim.status}. Ask about the status, decision, requested documents, appeal deadline, or payment information.`,
+    topic: 'claim_overview',
+    sources: [baseSource],
+    allowedActions: ['explain_status', 'explain_denial', 'list_required_documents', 'explain_recorded_financials'],
+  };
+}
+
+function recordGroundedResponse(
+  state: WorkflowState,
+  grounded: GroundedResponse,
+): WorkflowState {
+  return {
+    ...state,
+    processing: {
+      discussedTopics: [
+        ...state.processing.discussedTopics,
+        grounded.topic,
+      ].filter((topic, index, topics) => topics.indexOf(topic) === index),
+      groundingSources: [...grounded.sources],
+      allowedActions: [...grounded.allowedActions],
+    },
+  };
 }
 
 export function processMessage(
@@ -722,9 +919,11 @@ export function processMessage(
       }
       state = { ...state, selectedCaseId: claim.case_id };
       state = transition(state, 'PROCESS_CASE', Boolean(state.selectedCaseId));
+      const grounded = groundedClaimReply(claim, text, data);
+      state = recordGroundedResponse(state, grounded);
       return {
         state,
-        reply: `Thank you—your identity is verified. I also remembered what you shared earlier and matched it to claim ${claim.case_id}, so you don’t need to start over. ${groundedClaimReply(claim, text)}`,
+        reply: `Thank you—your identity is verified. I also remembered what you shared earlier and matched it to claim ${claim.case_id}, so you don’t need to start over. ${grounded.text}`,
       };
     }
     return {
@@ -753,7 +952,9 @@ export function processMessage(
     }
     state = { ...state, selectedCaseId: claim.case_id };
     state = transition(state, 'PROCESS_CASE', Boolean(state.selectedCaseId));
-    return { state, reply: groundedClaimReply(claim, text) };
+    const grounded = groundedClaimReply(claim, text, data);
+    state = recordGroundedResponse(state, grounded);
+    return { state, reply: grounded.text };
   }
 
   if (state.phase === 'PROCESS_CASE') {
@@ -777,7 +978,9 @@ export function processMessage(
         reply: `Before we finish, would you like an email summary covering claim ${claim.case_id}, its ${claim.status} status, and the next steps we discussed? You can say yes or skip.`,
       };
     }
-    return { state, reply: groundedClaimReply(claim, text) };
+    const grounded = groundedClaimReply(claim, text, data);
+    state = recordGroundedResponse(state, grounded);
+    return { state, reply: grounded.text };
   }
 
   if (/\b(yes|send|email it|please do)\b/i.test(text)) {

@@ -7,6 +7,7 @@ import {
   processMessage,
   type Claim,
   type Policyholder,
+  type RequiredDocumentGuidance,
   type WorkflowData,
   type WorkflowState,
 } from './claims-workflow.ts';
@@ -17,7 +18,13 @@ const policyholders = JSON.parse(
 const claims = JSON.parse(
   readFileSync(new URL('../../fixtures/claims.json', import.meta.url), 'utf8'),
 ) as Claim[];
-const data: WorkflowData = { policyholders, claims };
+const documentGuidance = JSON.parse(
+  readFileSync(
+    new URL('../../fixtures/required_document_guideline.json', import.meta.url),
+    'utf8',
+  ),
+) as RequiredDocumentGuidance;
+const data: WorkflowData = { policyholders, claims, documentGuidance };
 
 function turn(state: WorkflowState, message: string) {
   return processMessage(state, message, data);

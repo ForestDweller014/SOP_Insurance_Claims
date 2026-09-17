@@ -12,6 +12,7 @@ on:
       - 'apps/insurance_claims/demo/**'
       - 'apps/insurance_claims/fixtures/**'
       - '.github/workflows/insurance-demo-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -44,3 +45,42 @@ jobs:
 
       - name: Validate application
         run: npm run check
+
+  deploy:
+    name: Deploy to Cloudflare Workers
+    needs: validate
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/insurance_claims/demo
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.19.0'
+          cache: npm
+          cache-dependency-path: apps/insurance_claims/demo/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build worker bundle
+        run: npm run build
+
+      - name: Publish to Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          npx wrangler deploy --config dist/server/wrangler.json | tee deploy.log
+          url="$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)"
+          echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "${url:-Deploy succeeded; see step log for the URL.}" >> "$GITHUB_STEP_SUMMARY"

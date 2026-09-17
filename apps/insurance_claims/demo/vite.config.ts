@@ -13,6 +13,8 @@ const { d1, r2 } = hostingConfig;
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
 
 const localBindingConfig = {
+  // Worker name; also the first label of the workers.dev URL.
+  name: 'sop-insurance-claims',
   main: 'vinext/server/app-router-entry',
   compatibility_flags: ['nodejs_compat'],
   d1_databases: d1

@@ -1,0 +1,46 @@
+name: Insurance demo CI
+
+on:
+  pull_request:
+    paths:
+      - 'apps/insurance_claims/demo/**'
+      - 'apps/insurance_claims/fixtures/**'
+      - '.github/workflows/insurance-demo-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/insurance_claims/demo/**'
+      - 'apps/insurance_claims/fixtures/**'
+      - '.github/workflows/insurance-demo-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: insurance-demo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, test, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/insurance_claims/demo
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22.19.0'
+          cache: npm
+          cache-dependency-path: apps/insurance_claims/demo/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate application
+        run: npm run check
